@@ -114,7 +114,7 @@ sequenceDiagram
 ## 3. Mapper 생성과 컴파일 검증
 
 `POST /api/v1/mapping-projects/{id}/generate`는 JSON으로 생성 파일과 컴파일 결과를 반환합니다.
-생성기는 동일 revision의 `APPROVED` 결정만 사용합니다.
+생성기는 동일 revision의 `APPROVED` 결정만 사용하며 생성 Mapper는 `mapper-runtime` 모듈을 참조합니다.
 
 ![Mapper 생성과 컴파일 검증 시퀀스](images/03-generation-compilation.svg)
 
@@ -129,6 +129,7 @@ sequenceDiagram
     participant Generator as MapperGenerationService
     participant Project as MappingProjectService
     participant Compiler as JavaCompilationVerifier
+    participant Runtime as mapper-runtime
 
     User->>API: POST /{id}/generate<br/>revision, packageName, className
     API->>Generator: generate(id, revision, packageName, className)
@@ -143,9 +144,11 @@ sequenceDiagram
         Generator-->>API: GenerationResult<br/>compilation.success=false
         API-->>User: MAPPING_VALIDATION 오류
     else 유효한 승인 매핑
-        Generator->>Generator: Java Mapper 생성
+        Generator->>Generator: MapperRuntime을 호출하는 Java Mapper 생성
         Generator->>Generator: JUnit 테스트 생성
         Generator->>Compiler: VO + Mapper + JUnit 컴파일
+        Compiler->>Runtime: MapperRuntime 공개 API 확인
+        Runtime-->>Compiler: 런타임 타입 정보
         Compiler-->>Generator: 성공 또는 파일·행·열·원인
         Generator-->>API: GenerationResult
         API-->>User: 생성 파일과 컴파일 결과 JSON

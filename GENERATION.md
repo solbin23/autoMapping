@@ -7,6 +7,7 @@ HTTP 상태와 고정 오류 코드는 [API 오류 응답](docs/api-errors.md)�
 `reviewRequired=false`는 사용자 승인을 대신하지 않습니다. 생성기는 `APPROVED` 결정만 사용합니다.
 현재 프로젝트 저장소는 프로세스 메모리이므로 재시작하면 프로젝트·결정이 사라집니다.
 생성 코드는 DB에 저장하지 않으며 응답의 파일 내용과 ZIP으로 제공합니다.
+생성 Mapper의 공통 경로 접근·타입 변환은 [`mapper-runtime`](mapper-runtime/README.md) 모듈이 담당합니다.
 
 ## API 순서
 
@@ -76,6 +77,9 @@ generate 응답에는 projectId, revision, files(path/content), compilation(succ
 ZIP에는 Mapper, JUnit 5 테스트, 원본 VO, 독립 실행용 build.gradle, README.txt,
 `mapping-plan.xlsx`, compilation-report.json이 들어갑니다. 응답 헤더
 `X-Compilation-Success`로 성공 여부를 확인합니다.
+생성된 `build.gradle`은 `com.example.aimapper:mapper-runtime:1.0.0-SNAPSHOT`을 참조합니다.
+로컬에서는 `.\gradlew.bat :mapper-runtime:publishToMavenLocal`로 게시한 뒤 사용할 수 있습니다.
+운영에서는 이 라이브러리를 사내 Maven 저장소에 게시하고 생성 프로젝트에 저장소 URL을 추가합니다.
 
 `mapping-plan.xlsx`의 `매핑 계획` 시트에는 AS-IS 필드·타입, 규칙 기반 최고 추천과 점수,
 사용자가 확정한 상태, 최종 TO-BE 필드·타입, 변환 타입, Mapper 포함 여부가 기록됩니다.
@@ -128,7 +132,8 @@ null 배열을 보존합니다. 승인되지 않은 필드는 `sourceData`에 �
 ## 생성 범위와 검증
 
 승인 매핑을 AS-IS/TO-BE 클래스 쌍으로 묶어 `map1`, `map2` 형태의 타입 지정 메서드를 생성합니다.
-private 필드는 reflection으로 읽고 쓰므로 getter/setter는 필수가 아닙니다.
+생성 Mapper는 `MapperRuntime`의 공개 API만 호출하며 reflection 헬퍼 구현을 포함하지 않습니다.
+private 필드는 런타임 모듈이 reflection으로 읽고 쓰므로 getter/setter는 필수가 아닙니다.
 대상 VO·중첩 VO는 기본 생성자와 변경 가능한 필드가 필요하며 reflection 접근이 허용되어야 합니다.
 중첩 객체와 배열/List/Set의 원소를 지원합니다. 컬렉션 중첩 깊이가 동일해야 하며,
 원소 타입은 구체 클래스여야 합니다. 인터페이스 또는 ArrayList/HashSet과 호환되는 컨테이너를 사용합니다.
@@ -158,4 +163,5 @@ float/double의 유한 범위는 검사하지만 부동소수점 정밀도 손�
 자동 생성된 JUnit 테스트는 null 입력, 지원 타입의 승인 매핑 예제, 잘못된 숫자, 정수 overflow를 검사합니다.
 프로젝트 테스트에서는 생성된 테스트를 실제로 컴파일·실행해 기본 변환 및 중첩 컬렉션을 확인합니다.
 또한 상태 전환·추천 불변성·미승인 제외·컴파일 진단·업로드부터 ZIP 다운로드까지 검증합니다.
-전체 테스트: `.\gradlew.bat test`. OpenAI는 모킹/비활성화하므로 실제 API 호출은 없습니다.
+전체 테스트: `.\gradlew.bat test`. 루트 테스트가 `mapper-runtime` 테스트도 함께 실행합니다.
+OpenAI는 모킹/비활성화하므로 실제 API 호출은 없습니다.

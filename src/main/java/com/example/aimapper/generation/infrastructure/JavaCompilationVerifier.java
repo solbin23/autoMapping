@@ -60,7 +60,8 @@ public class JavaCompilationVerifier {
                 org.apiguardian.api.API.class,
                 org.opentest4j.AssertionFailedError.class,
                 org.junit.platform.commons.JUnitException.class,
-                jakarta.validation.constraints.NotNull.class)) {
+                jakarta.validation.constraints.NotNull.class,
+                com.example.aimapper.runtime.MapperRuntime.class)) {
             var url = type.getProtectionDomain().getCodeSource().getLocation();
             if (url.getProtocol().equals("file")) entries.add(new File(url.toURI()).getPath());
         }

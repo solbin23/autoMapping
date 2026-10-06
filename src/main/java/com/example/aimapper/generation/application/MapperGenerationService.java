@@ -6,11 +6,10 @@ import com.example.aimapper.schema.application.JavaSourceFile;
 import com.example.aimapper.schema.domain.SchemaField;
 import com.example.aimapper.schema.domain.SchemaSnapshot;
 import com.example.aimapper.ai.domain.AiMappingSuggestion.Target;
+import com.example.aimapper.runtime.MapperRuntime;
 import com.github.javaparser.StaticJavaParser;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import javax.lang.model.SourceVersion;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -50,17 +49,22 @@ public class MapperGenerationService {
         Map<String, List<MappingDecision>> groups = new LinkedHashMap<>();
         approved.forEach(d -> groups.computeIfAbsent(d.source().className() + "->" + d.target().className(), key -> new ArrayList<>()).add(d));
         String header = packageName.isEmpty() ? "" : "package " + packageName + ";\n\n";
-        StringBuilder mapper = new StringBuilder(header).append("public final class ").append(className).append(" {\n");
-        StringBuilder test = new StringBuilder(header).append("import org.junit.jupiter.api.Test;\n")
+        String runtimeImport = "import com.example.aimapper.runtime.MapperRuntime;\n";
+        StringBuilder mapper = new StringBuilder(header).append(runtimeImport).append("\npublic final class ")
+                .append(className).append(" {\n");
+        StringBuilder test = new StringBuilder(header).append(runtimeImport)
+                .append("import org.junit.jupiter.api.Test;\n")
                 .append("import static org.junit.jupiter.api.Assertions.*;\n\nclass ").append(className).append("Test {\n");
         int methodIndex = 0;
         for (var decisions : groups.values()) {
             String source = decisions.getFirst().source().className(), target = decisions.getFirst().target().className();
             String method = "map" + (++methodIndex);
             mapper.append("    public ").append(target).append(' ').append(method).append('(').append(source).append(" source) {\n")
-                    .append("        if (source == null) return null;\n        ").append(target).append(" target = instantiate(").append(target).append(".class);\n");
-            for (var decision : decisions) mapper.append("        writePath(target, \"").append(decision.target().path())
-                    .append("\", readPath(source, \"").append(decision.source().path()).append("\"), \"")
+                    .append("        if (source == null) return null;\n        ").append(target)
+                    .append(" target = MapperRuntime.instantiate(").append(target).append(".class);\n");
+            for (var decision : decisions) mapper.append("        MapperRuntime.writePath(target, \"")
+                    .append(decision.target().path()).append("\", MapperRuntime.readPath(source, \"")
+                    .append(decision.source().path()).append("\"), \"")
                     .append(decision.conversionType().name()).append("\");\n");
             mapper.append("        return target;\n    }\n\n");
             test.append("    @Test void ").append(method).append("NullSource() { assertNull(new ").append(className).append("().")
@@ -77,26 +81,23 @@ public class MapperGenerationService {
                     expected = "new java.math.BigDecimal(String.valueOf(" + input + "))";
                 }
                 expected = wrapLists(expected, decision.target().path());
-                test.append("    @Test void ").append(method).append("Field").append(++fieldIndex).append("() {\n        var source = ")
-                        .append(className).append(".instantiate(").append(source).append(".class);\n");
+                test.append("    @Test void ").append(method).append("Field").append(++fieldIndex)
+                        .append("() {\n        var source = MapperRuntime.instantiate(").append(source).append(".class);\n");
                 for (var setup : decisions) {
                     String value = sample(field(project.recommendations().asIs(), setup.source()).javaType(), field(project.recommendations().toBe(), setup.target()).javaType());
-                    if (value != null) test.append("        ").append(className).append(".writePath(source, \"").append(setup.source().path())
+                    if (value != null) test.append("        MapperRuntime.writePath(source, \"").append(setup.source().path())
                             .append("\", ").append(wrapLists(value, setup.source().path())).append(", \"DIRECT\");\n");
                 }
                 test.append("        var target = new ").append(className).append("().").append(method).append("(source);\n")
-                        .append("        assertEquals(").append(expected).append(", ").append(className).append(".readPath(target, \"")
+                        .append("        assertEquals(").append(expected).append(", MapperRuntime.readPath(target, \"")
                         .append(decision.target().path()).append("\"));\n    }\n");
             }
         }
         test.append("    @Test void rejectsInvalidConversion() {\n        assertThrows(IllegalArgumentException.class, () -> ")
-                .append(className).append(".convert(\"not-a-number\", int.class, \"STRING_PARSE\"));\n    }\n")
+                .append("MapperRuntime.convert(\"not-a-number\", int.class, \"STRING_PARSE\"));\n    }\n")
                 .append("    @Test void rejectsOverflow() {\n        assertThrows(ArithmeticException.class, () -> ")
-                .append(className).append(".convert(\"2147483648\", int.class, \"STRING_PARSE\"));\n    }\n}\n");
-        // 중첩 경로 접근과 기본 타입 변환용 런타임 도우미를 Mapper 클래스 안에 포함한다.
-        try (var stream = new ClassPathResource("generation/mapper-helpers.txt").getInputStream()) {
-            mapper.append(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).append("\n}\n");
-        } catch (java.io.IOException ex) { throw new IllegalStateException("Mapper template missing", ex); }
+                .append("MapperRuntime.convert(\"2147483648\", int.class, \"STRING_PARSE\"));\n    }\n}\n");
+        mapper.append("}\n");
 
         String prefix = packageName.isEmpty() ? "" : packageName.replace('.', '/') + "/";
         List<GeneratedFile> files = new ArrayList<>();
@@ -107,10 +108,11 @@ public class MapperGenerationService {
         if (files.stream().map(GeneratedFile::path).distinct().count() != files.size()) throw new IllegalArgumentException("Duplicate source file paths");
         files.add(new GeneratedFile("build.gradle", """
                 plugins { id 'java' }
-                repositories { mavenCentral() }
+                repositories { mavenLocal(); mavenCentral() }
                 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
                 sourceSets.main.java.srcDirs = ['src/main/java', 'sources/as-is', 'sources/to-be']
                 dependencies {
+                    implementation '%s'
                     compileOnly 'jakarta.validation:jakarta.validation-api:3.0.2'
                     testImplementation platform('org.junit:junit-bom:5.12.2')
                     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -118,9 +120,10 @@ public class MapperGenerationService {
                     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
                 }
                 test { useJUnitPlatform() }
-                """));
+                """.formatted(MapperRuntime.MAVEN_COORDINATE)));
         files.add(new GeneratedFile("README.txt", "Java 21 and Gradle are required. Run: gradle test\n"
                 + "Only explicitly APPROVED decisions are mapped. See compilation-report.json in the ZIP.\n"
+                + "The mapper depends on " + MapperRuntime.MAVEN_COORDINATE + ". Publish it to your artifact repository or Maven Local.\n"
                 + "VOs need usable no-arg constructors and writable fields; reflection must be allowed.\n"
                 + "Add external VO dependencies to build.gradle as needed.\n"));
         // 반환 전에 사용자 VO, Mapper와 JUnit을 한 번에 컴파일해 오류 위치를 확정한다.
