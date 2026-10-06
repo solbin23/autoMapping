@@ -19,6 +19,7 @@ HTTP 상태와 고정 오류 코드는 [API 오류 응답](docs/api-errors.md)�
 5. `GET /api/v1/mapping-projects/{id}/mapping-plan.xlsx?revision={revision}`:
    추천과 최종 결정을 비교할 수 있는 엑셀 파일 다운로드.
 6. `POST /api/v1/mapping-projects/{id}/download`: Mapper, JUnit, 엑셀과 컴파일 보고서를 ZIP으로 다운로드.
+7. `POST /api/v1/mapping-projects/{id}/execute`: 승인된 결정으로 외부 시스템의 AS-IS JSON을 TO-BE JSON으로 변환.
 
 결정 요청 예시:
 
@@ -45,7 +46,7 @@ HTTP 상태와 고정 오류 코드는 [API 오류 응답](docs/api-errors.md)�
 `UNMAPPED`, `REJECTED`의 target과 conversionType은 null이어야 합니다.
 추천 후보 외에도 업로드한 TO-BE에 실제 존재하는 필드로 수정할 수 있습니다.
 결정 변경마다 revision이 증가합니다. 변경 및 생성 요청은 최신 revision을 보내야 하며,
-오래된 revision은 400으로 거부합니다. 생성은 해당 revision의 불변 스냅샷을 사용합니다.
+오래된 revision은 409로 거부합니다. 생성과 실행은 해당 revision의 불변 스냅샷을 사용합니다.
 
 생성/다운로드 요청:
 
@@ -71,7 +72,7 @@ generate 응답에는 projectId, revision, files(path/content), compilation(succ
 ```
 
 생성 전 매핑 검증 실패는 `MAPPING_VALIDATION`과 행·열 -1을 반환합니다.
-승인 매핑 없음, 잘못된 요청, 존재하지 않는 프로젝트는 400입니다.
+승인 매핑 없음은 422, 잘못된 요청은 400, 존재하지 않는 프로젝트는 404입니다.
 ZIP에는 Mapper, JUnit 5 테스트, 원본 VO, 독립 실행용 build.gradle, README.txt,
 `mapping-plan.xlsx`, compilation-report.json이 들어갑니다. 응답 헤더
 `X-Compilation-Success`로 성공 여부를 확인합니다.
@@ -83,6 +84,46 @@ ZIP에는 Mapper, JUnit 5 테스트, 원본 VO, 독립 실행용 build.gradle, R
 표현하지 않습니다. 테스트는 엑셀 파일을 생성하지 않고 API 응답의 XLSX 구조만 검증합니다.
 압축을 푼 후 JDK 21과 설치된 Gradle로 `gradle test`를 실행할 수 있습니다.
 VO에서 사용하는 외부 라이브러리는 build.gradle에 추가해야 합니다.
+
+## 실제 JSON 데이터 변환
+
+외부 시스템은 Mapper ZIP을 프로젝트에 포함하지 않아도 승인된 매핑을 서버에서 바로 실행할 수 있습니다.
+실행 단계는 OpenAI, 규칙 재분석, 코드 생성 또는 컴파일을 호출하지 않습니다.
+
+```http
+POST /api/v1/mapping-projects/{id}/execute
+Content-Type: application/json
+```
+
+```json
+{
+  "revision": 1,
+  "sourceClass": "legacy.OldOrder",
+  "targetClass": "modern.NewOrder",
+  "sourceData": {
+    "saleAmount": "12500",
+    "internalMemo": "승인되지 않아 복사되지 않음"
+  }
+}
+```
+
+```json
+{
+  "projectId": "프로젝트 UUID",
+  "revision": 1,
+  "sourceClass": "legacy.OldOrder",
+  "targetClass": "modern.NewOrder",
+  "targetData": {
+    "amount": 12500
+  },
+  "appliedMappings": 1
+}
+```
+
+`sourceClass`와 `targetClass`는 업로드 소스의 정규 클래스명입니다. 한 프로젝트에 여러 루트 클래스가
+있을 수 있으므로 실행할 클래스 쌍을 명시합니다. 같은 깊이의 중첩 배열을 인덱스별로 변환하며 빈 배열과
+null 배열을 보존합니다. 승인되지 않은 필드는 `sourceData`에 있어도 결과에 포함하지 않습니다.
+실행 값의 타입·범위·필수값이 승인 계획과 맞지 않으면 422 `MAPPING_EXECUTION_FAILED`를 반환합니다.
 
 ## 생성 범위와 검증
 

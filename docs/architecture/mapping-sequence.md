@@ -216,12 +216,12 @@ build.gradle
 README.txt
 ```
 
-## 5. 향후 실데이터 변환 흐름
+## 5. 외부 시스템 실데이터 변환 흐름
 
-아래 `/execute` API와 JSON 매핑 실행기는 아직 구현되지 않았습니다. 구현 시 AI를 호출하지 않고
-저장된 승인 계획만 결정적으로 실행하는 구성을 권장합니다.
+`POST /api/v1/mapping-projects/{id}/execute`는 저장된 승인 계획으로 AS-IS JSON을 TO-BE JSON으로
+변환합니다. 실행 단계에서는 AI, 규칙 재분석, 코드 생성과 컴파일을 호출하지 않습니다.
 
-![향후 실데이터 변환 시퀀스](images/05-future-execution.svg)
+![외부 시스템 실데이터 변환 시퀀스](images/05-json-execution.svg)
 
 <details>
 <summary>Mermaid 원본 보기</summary>
@@ -231,25 +231,33 @@ sequenceDiagram
     autonumber
     actor Client as 업무 시스템
     participant API as MappingExecutionController
-    participant Store as 영구 MappingPlan 저장소
+    participant Service as MappingExecutionService
+    participant Store as MappingProjectService
     participant Engine as JsonMappingEngine
 
-    Note over API,Engine: 향후 구현 범위
-    Client->>API: POST /{id}/execute<br/>revision + AS-IS JSON
-    API->>Store: 승인된 MappingPlan 조회
-    Store-->>API: 해당 revision의 매핑 계획
-    API->>Engine: execute(plan, sourceJson)
+    Client->>API: POST /{id}/execute<br/>revision + 클래스 쌍 + AS-IS JSON
+    API->>Service: execute(id, revision, classes, sourceData)
+    Service->>Store: get(id)
+    Store-->>Service: 현재 MappingProject
 
-    alt 전체 필드 변환 성공
-        Engine-->>API: TO-BE JSON
-        API-->>Client: 200 OK + 변환 결과
-    else 타입·경로·필수값 오류
-        Engine-->>API: 필드별 MappingError
-        API-->>Client: 변환 실패 응답
+    alt 프로젝트 없음 또는 revision 불일치
+        Service-->>API: 404 또는 409 오류
+        API-->>Client: 고정 오류 코드
+    else 현재 revision
+        Service->>Engine: 승인 결정 + sourceData
+        alt 변환 성공
+            Engine-->>Service: targetData + 적용 매핑 수
+            Service-->>API: MappingExecutionResult
+            API-->>Client: 200 OK + TO-BE JSON
+        else 타입·경로·필수값 오류
+            Engine-->>Service: MappingExecutionException
+            Service-->>API: 실행 실패
+            API-->>Client: 422 MAPPING_EXECUTION_FAILED
+        end
     end
 ```
 
 </details>
 
 현재 `MappingProjectService`는 프로젝트와 결정을 메모리에 저장하므로 서버 재시작 시 사라집니다.
-실데이터 실행 API를 운영하려면 먼저 승인 계획을 DB 또는 버전 관리 파일에 영구 저장해야 합니다.
+실데이터 실행 API를 운영 배포하기 전에는 승인 계획을 DB 또는 버전 관리 파일에 영구 저장해야 합니다.

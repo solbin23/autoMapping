@@ -1,5 +1,6 @@
 package com.example.aimapper.common.presentation;
 
+import com.example.aimapper.execution.application.MappingExecutionException;
 import com.example.aimapper.generation.application.MappingProjectNotFoundException;
 import com.example.aimapper.generation.application.NoApprovedMappingsException;
 import com.example.aimapper.generation.application.ProjectRevisionConflictException;
@@ -45,6 +46,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleUnprocessable(NoApprovedMappingsException exception,
                                                         HttpServletRequest request) {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.NO_APPROVED_MAPPINGS, exception, request);
+    }
+
+    /** 승인 계획과 실제 JSON 값이 맞지 않아 변환할 수 없으면 422로 반환한다. */
+    @ExceptionHandler(MappingExecutionException.class)
+    public ResponseEntity<ApiError> handleExecutionFailure(MappingExecutionException exception,
+                                                           HttpServletRequest request) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.MAPPING_EXECUTION_FAILED, exception, request);
     }
 
     /** Java 소스 구문 오류는 일반 입력 오류와 구분되는 400 코드로 반환한다. */

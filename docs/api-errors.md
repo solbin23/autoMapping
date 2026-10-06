@@ -26,6 +26,7 @@
 | 413 | `UPLOAD_TOO_LARGE` | multipart 용량 제한 초과 | 파일 크기 또는 개수 축소 |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | 지원하지 않는 Content-Type | 엔드포인트의 요청 형식 사용 |
 | 422 | `NO_APPROVED_MAPPINGS` | 생성할 승인 매핑이 없음 | 하나 이상의 매핑 승인 |
+| 422 | `MAPPING_EXECUTION_FAILED` | 실제 JSON 값 또는 승인 변환을 실행할 수 없음 | 응답의 소스·대상 경로와 원인 확인 |
 | 500 | `INTERNAL_ERROR` | 예상하지 못한 서버 오류 | 서버 로그 확인 후 재시도 |
 
 Mapper 컴파일 실패와 매핑 생성 검증 오류는 생성 작업의 정상 결과이므로 HTTP 200의
