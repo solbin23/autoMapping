@@ -1,6 +1,7 @@
 # MVP 2: 규칙 기반 필드 매칭
 
 분석부터 승인과 코드 생성까지의 호출 순서는 [매핑 시스템 시퀀스 다이어그램](docs/architecture/mapping-sequence.md)에서 확인할 수 있습니다.
+HTTP 상태와 고정 오류 코드는 [API 오류 응답](docs/api-errors.md)에서 확인할 수 있습니다.
 
 `POST /api/v1/schemas/analyze`에 기존처럼 `asIsFiles`, `toBeFiles`를 multipart로 전달합니다.
 응답은 기존 `asIs`, `toBe`, `matches`와 AI 검토 결과 `aiSuggestions`를 포함합니다.

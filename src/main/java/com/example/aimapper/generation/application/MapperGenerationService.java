@@ -34,13 +34,15 @@ public class MapperGenerationService {
     public GenerationResult generate(UUID id, long expectedRevision, String packageName, String className) {
         var stored = projects.stored(id);
         var project = stored.project();
-        if (project.revision() != expectedRevision) throw new IllegalArgumentException("Project revision changed; reload before generation");
+        if (project.revision() != expectedRevision) {
+            throw new ProjectRevisionConflictException(id, expectedRevision, project.revision());
+        }
         if (packageName == null || (!packageName.isEmpty() && !SourceVersion.isName(packageName))
                 || className == null || !SourceVersion.isIdentifier(className) || SourceVersion.isKeyword(className)) {
             throw new IllegalArgumentException("Valid Java package and mapper class names are required");
         }
         var approved = project.decisions().stream().filter(d -> d.status() == MappingDecision.Status.APPROVED).toList();
-        if (approved.isEmpty()) throw new IllegalArgumentException("At least one approved mapping is required");
+        if (approved.isEmpty()) throw new NoApprovedMappingsException(id);
         List<CompilationResult.Problem> problems = validate(approved, project);
         if (!problems.isEmpty()) return new GenerationResult(id, project.revision(), List.of(), new CompilationResult(false, problems));
 

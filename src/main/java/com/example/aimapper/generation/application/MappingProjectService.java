@@ -39,9 +39,11 @@ public class MappingProjectService {
             throw new IllegalArgumentException("Source and decision status are required");
         }
         return projects.compute(id, (key, stored) -> {
-            if (stored == null) throw new IllegalArgumentException("Unknown mapping project: " + id);
+            if (stored == null) throw new MappingProjectNotFoundException(id);
             var current = stored.project();
-            if (current.revision() != expectedRevision) throw new IllegalArgumentException("Project revision changed; reload before updating");
+            if (current.revision() != expectedRevision) {
+                throw new ProjectRevisionConflictException(id, expectedRevision, current.revision());
+            }
             if (!exists(current.recommendations().asIs(), decision.source())) throw new IllegalArgumentException("Unknown source field");
             boolean selected = decision.status() == MappingDecision.Status.APPROVED || decision.status() == MappingDecision.Status.MODIFIED;
             if (selected && (decision.target() == null || decision.conversionType() == null
@@ -59,7 +61,7 @@ public class MappingProjectService {
     /** 코드 생성에 필요한 프로젝트와 원본 소스를 함께 조회한다. */
     public StoredProject stored(UUID id) {
         var stored = projects.get(id);
-        if (stored == null) throw new IllegalArgumentException("Unknown mapping project: " + id);
+        if (stored == null) throw new MappingProjectNotFoundException(id);
         return stored;
     }
 

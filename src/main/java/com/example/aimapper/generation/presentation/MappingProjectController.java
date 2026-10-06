@@ -66,7 +66,7 @@ public class MappingProjectController {
     public ResponseEntity<byte[]> mappingPlan(@PathVariable UUID id, @RequestParam long revision) {
         var project = projects.get(id);
         if (project.revision() != revision) {
-            throw new IllegalArgumentException("Project revision changed; reload before export");
+            throw new ProjectRevisionConflictException(id, revision, project.revision());
         }
         byte[] excel = excelWriter.write(project);
         return ResponseEntity.ok()

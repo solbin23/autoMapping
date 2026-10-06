@@ -1,6 +1,7 @@
 # 승인 기반 Mapper 생성
 
 전체 호출 순서는 [매핑 시스템 시퀀스 다이어그램](docs/architecture/mapping-sequence.md)에서 확인할 수 있습니다.
+HTTP 상태와 고정 오류 코드는 [API 오류 응답](docs/api-errors.md)에서 확인할 수 있습니다.
 
 분석 추천과 사용자 최종 결정은 별도 객체로 저장됩니다. 추천 점수나 AI의
 `reviewRequired=false`는 사용자 승인을 대신하지 않습니다. 생성기는 `APPROVED` 결정만 사용합니다.

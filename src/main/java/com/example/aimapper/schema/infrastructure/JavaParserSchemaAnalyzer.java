@@ -53,8 +53,8 @@ public class JavaParserSchemaAnalyzer implements SchemaAnalysisPort {
         this.javaParser = new JavaParser(configuration);
     }
 
-    @Override
     /** 여러 Java 파일을 함께 분석해 타입 참조와 중첩 구조를 연결한 스키마를 만든다. */
+    @Override
     public List<SchemaClass> analyze(List<JavaSourceFile> sourceFiles) {
         List<ParsedClass> parsedClasses = parse(sourceFiles);
         Map<String, ParsedClass> classIndex = index(parsedClasses);
