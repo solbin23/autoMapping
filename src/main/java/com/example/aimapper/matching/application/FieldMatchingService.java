@@ -14,13 +14,15 @@ import java.util.List;
 @Service
 public class FieldMatchingService {
     private final List<MatchingRule> rules;
+    private final MatchingProperties properties;
 
-    public FieldMatchingService(List<MatchingRule> rules) {
+    public FieldMatchingService(List<MatchingRule> rules, MatchingProperties properties) {
         if (rules.isEmpty() || rules.stream().anyMatch(r -> !Double.isFinite(r.weight()) || r.weight() <= 0)
                 || rules.stream().map(MatchingRule::id).distinct().count() != rules.size()) {
             throw new IllegalArgumentException("Matching rules require unique IDs and positive finite weights");
         }
         this.rules = rules.stream().sorted(Comparator.comparing(MatchingRule::id)).toList();
+        this.properties = properties;
     }
 
     /** 두 스키마의 필드를 비교해 자동 확정 가능 여부와 검토 후보를 반환한다. */
@@ -48,13 +50,15 @@ public class FieldMatchingService {
             reason = "Generic field name requires manual review";
         } else if (best.evidence().stream().anyMatch(e -> e.result().blocksAutoMatch())) {
             reason = "One or more rules require manual review";
-        } else if (best.score() < 85) {
-            reason = "Best candidate score is below 85";
-        } else if (candidates.size() > 1 && best.score() - candidates.get(1).score() < 10) {
-            reason = "Top candidates differ by less than 10 points";
+        } else if (best.score() < properties.autoMatchMinScore()) {
+            reason = "Best candidate score is below " + properties.autoMatchMinScore();
+        } else if (candidates.size() > 1
+                && best.score() - candidates.get(1).score() < properties.minimumScoreGap()) {
+            reason = "Top candidates differ by less than " + properties.minimumScoreGap() + " points";
         }
         return new FieldMatch(source, reason == null ? FieldMatch.Status.AUTO_MATCHED : FieldMatch.Status.REVIEW_REQUIRED,
-                reason == null ? "Score >= 85, margin >= 10 and no review blockers" : reason, candidates);
+                reason == null ? "Score >= " + properties.autoMatchMinScore() + ", margin >= "
+                        + properties.minimumScoreGap() + " and no review blockers" : reason, candidates);
     }
 
     private MatchCandidate score(FieldReference source, FieldReference target) {
